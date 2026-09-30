@@ -1,0 +1,62 @@
+[general]
+service = "juice-shop.service"
+poll_interval_seconds = 5
+network_interface = "ens33"
+
+[collectors.morgan]
+enabled = true
+path = "/home/juice/juice-shop/logs/access.log.*"
+start_at_end = true
+
+[collectors.journal]
+enabled = true
+retry_seconds = 5
+
+[collectors.process]
+enabled = true
+
+[collectors.system]
+enabled = true
+
+[storage]
+enabled = true
+path = "data/edr4.db"
+metric_persist_interval_seconds = 15
+retention_days = 3
+cleanup_interval_seconds = 3600
+
+[console]
+verbose = false
+
+[detection]
+enabled = true
+cooldown_seconds = 60
+
+[detection.url_sqli]
+enabled = true
+
+[detection.request_rate]
+enabled = true
+window_seconds = 10
+threshold = 30
+per_source_threshold = 20
+
+[detection.auth_401]
+enabled = true
+window_seconds = 60
+threshold = 5
+path_fragments = ["/login", "/authenticate"]
+
+[detection.status_anomaly]
+enabled = true
+window_seconds = 60
+minimum_requests = 20
+client_error_ratio = 0.50
+server_error_ratio = 0.20
+
+[detection.process_state]
+enabled = true
+abnormal_states = ["dead", "zombie", "stopped", "tracing-stop"]
+
+[response]
+enabled = false
