@@ -8,6 +8,17 @@ It observes the existing host and application telemetry. It does not modify Juic
 
 For first-time setup, follow [INSTALL.md](INSTALL.md).
 
+Before contributing, read [CONTRIBUTING.md](CONTRIBUTING.md) for the shared Git
+commit-message convention and required pre-commit checks.
+
+Code contributions should follow [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md),
+which defines the module, function, security-comment, and privacy-documentation
+conventions used by this repository.
+
+Team members who are new to Python should begin with
+[docs/CODE_WALKTHROUGH.md](docs/CODE_WALKTHROUGH.md), which explains the event
+flow, threads, queues, type hints, sliding windows, and privacy boundaries.
+
 ## Quick start
 
 ```bash
@@ -236,10 +247,12 @@ edr4/
 ├── config.toml
 ├── requirements.txt
 ├── INSTALL.md
+├── CONTRIBUTING.md
 ├── README.md
 ├── collectors/        # Morgan, journal, process, system/network
 ├── core/              # event model, queue, config, logging, redaction
 ├── detection/         # passive rules, cooldowns and detection engine
+├── docs/              # coding and project documentation
 ├── response/          # inactive interfaces for later rounds
 ├── scripts/           # controlled localhost-only detector validation
 ├── storage/           # SQLite database and persistence policy
