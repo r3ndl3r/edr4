@@ -1,3 +1,5 @@
+"""Unit tests for passive detectors and normalized finding persistence."""
+
 from __future__ import annotations
 
 import unittest
@@ -5,7 +7,7 @@ import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from core.events import create_event
+from core.events import TelemetryEvent, create_event
 from detection.base import detection_to_event
 from detection.engine import DetectionEngine
 from detection.rules import (
@@ -22,7 +24,8 @@ BASE_TIME = datetime(2026, 9, 30, 10, 0, tzinfo=UTC)
 
 
 def http_event(offset: float, *, status: int = 200, source: str = "192.0.2.10",
-               path: str = "/rest/products"):
+               path: str = "/rest/products") -> TelemetryEvent:
+    """Build a synthetic HTTP event at a controlled offset from BASE_TIME."""
     return create_event(
         timestamp=(BASE_TIME + timedelta(seconds=offset)).isoformat(),
         event_type="http_request",
@@ -32,7 +35,8 @@ def http_event(offset: float, *, status: int = 200, source: str = "192.0.2.10",
     )
 
 
-def process_event(offset: float, *, pid: int, status: str):
+def process_event(offset: float, *, pid: int, status: str) -> TelemetryEvent:
+    """Build a synthetic process snapshot for state-transition tests."""
     return create_event(
         timestamp=(BASE_TIME + timedelta(seconds=offset)).isoformat(),
         event_type="process_snapshot",
@@ -43,6 +47,8 @@ def process_event(offset: float, *, pid: int, status: str):
 
 
 class RequestRateDetectorTests(unittest.TestCase):
+    """Verify request-rate windows, thresholds, and cooldown behavior."""
+
     def test_global_and_source_rate_thresholds_and_cooldown(self) -> None:
         detector = RequestRateDetector(
             window_seconds=10, threshold=3, per_source_threshold=3, cooldown_seconds=60
@@ -63,6 +69,8 @@ class RequestRateDetectorTests(unittest.TestCase):
 
 
 class UrlSqlInjectionDetectorTests(unittest.TestCase):
+    """Verify sanitized URL evidence can produce SQLi findings."""
+
     def test_sanitized_url_indicators_generate_finding(self) -> None:
         detector = UrlSqlInjectionDetector(cooldown_seconds=60)
         event = create_event(
@@ -92,6 +100,8 @@ class UrlSqlInjectionDetectorTests(unittest.TestCase):
 
 
 class Auth401DetectorTests(unittest.TestCase):
+    """Verify authentication-like 401 responses are counted selectively."""
+
     def test_repeated_authentication_like_401s(self) -> None:
         detector = RepeatedAuth401Detector(
             window_seconds=60, threshold=3, path_fragments=["/login"], cooldown_seconds=60
@@ -112,6 +122,8 @@ class Auth401DetectorTests(unittest.TestCase):
 
 
 class StatusAnomalyDetectorTests(unittest.TestCase):
+    """Verify rolling HTTP client- and server-error ratio findings."""
+
     def test_client_error_ratio(self) -> None:
         detector = StatusAnomalyDetector(
             window_seconds=60, minimum_requests=4, client_error_ratio=0.5,
@@ -139,6 +151,8 @@ class StatusAnomalyDetectorTests(unittest.TestCase):
 
 
 class ProcessStateDetectorTests(unittest.TestCase):
+    """Verify service loss, PID changes, and abnormal process states."""
+
     def test_pid_and_abnormal_state_changes(self) -> None:
         detector = ProcessStateDetector(
             abnormal_states=["zombie", "stopped", "dead"], cooldown_seconds=0
@@ -166,6 +180,8 @@ class ProcessStateDetectorTests(unittest.TestCase):
 
 
 class DetectionEngineTests(unittest.TestCase):
+    """Verify engine configuration and conversion to stored telemetry events."""
+
     def test_disabled_engine_returns_no_findings(self) -> None:
         engine = DetectionEngine({"enabled": False})
         self.assertEqual(engine.process(http_event(0, status=500)), [])

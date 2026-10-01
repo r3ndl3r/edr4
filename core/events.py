@@ -1,4 +1,8 @@
-"""Normalised telemetry event model."""
+"""Normalized event contract shared by collectors, detection, and storage.
+
+Event creation is also a privacy boundary: messages and structured data are
+redacted before any consumer can display or persist them.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +22,7 @@ def utc_now_iso() -> str:
 
 @dataclass(frozen=True, slots=True)
 class TelemetryEvent:
+    """Immutable identity and normalized payload for one observed event."""
     event_id: str
     timestamp: str
     host: str
@@ -28,6 +33,7 @@ class TelemetryEvent:
     data: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        """Return a serializable representation of the complete event."""
         return asdict(self)
 
 
@@ -40,7 +46,21 @@ def create_event(
     data: dict[str, Any] | None = None,
     timestamp: str | None = None,
 ) -> TelemetryEvent:
-    """Create a normalised event with redaction applied at the boundary."""
+    """Create a normalized event with UUID, host identity, and redaction.
+
+    Args:
+        event_type: Normalized event category consumed by storage and rules.
+        source: Collector or subsystem that produced the event.
+        severity: Logging-compatible severity label.
+        message: Concise human-readable summary.
+        data: Source-specific structured fields.
+        timestamp: Optional source timestamp; current UTC time is used otherwise.
+
+    Returns:
+        A privacy-filtered ``TelemetryEvent`` ready for publication.
+    """
+    # Apply redaction here, before the object reaches the shared queue. Later
+    # console and storage redaction are defense-in-depth rather than substitutes.
     return TelemetryEvent(
         event_id=str(uuid.uuid4()),
         timestamp=timestamp or utc_now_iso(),

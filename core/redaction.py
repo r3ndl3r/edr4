@@ -26,6 +26,8 @@ def redact_text(value: str, max_length: int = MAX_TEXT_LENGTH) -> str:
     This is intentionally a secondary safeguard. Collectors avoid ingesting
     request bodies, cookie/auth headers, and raw query values in the first place.
     """
+    # Pattern redaction is deliberately conservative and cannot understand all
+    # possible secret formats. Architectural non-collection is the main control.
     text = _INLINE_SECRET.sub(lambda match: f"{match.group(1)}={REDACTED}", value)
     text = _BEARER.sub(f"Bearer {REDACTED}", text)
     if len(text) > max_length:
@@ -35,6 +37,8 @@ def redact_text(value: str, max_length: int = MAX_TEXT_LENGTH) -> str:
 
 def redact_value(value: Any, key: str | None = None) -> Any:
     """Recursively redact a JSON-compatible value."""
+    # A sensitive field name causes the entire value to be replaced without
+    # inspecting or stringifying it, reducing accidental secret exposure.
     if key is not None and _SENSITIVE_KEY.search(key):
         return REDACTED
     if isinstance(value, str):

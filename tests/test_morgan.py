@@ -1,3 +1,5 @@
+"""Unit tests for safe parsing of Morgan combined access-log records."""
+
 from __future__ import annotations
 
 import unittest
@@ -6,6 +8,8 @@ from collectors.morgan import parse_combined_line
 
 
 class MorganParserTests(unittest.TestCase):
+    """Verify field extraction, malformed input handling, and privacy rules."""
+
     def test_valid_combined_line(self) -> None:
         line = '192.0.2.10 - - [30/Sep/2026:08:40:12 +0000] "GET /rest/products HTTP/1.1" 200 321 "-" "TestAgent/1.0"'
         event = parse_combined_line(line)

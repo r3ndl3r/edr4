@@ -1,4 +1,8 @@
-"""Console logging configuration and event rendering."""
+"""Console logging configuration and privacy-aware event rendering.
+
+Normal mode emphasizes findings and warnings. Verbose mode exposes additional
+structured telemetry but still passes data through redaction before display.
+"""
 
 from __future__ import annotations
 
@@ -28,11 +32,15 @@ _LABELS = {
 
 
 class _LocalTimeFormatter(logging.Formatter):
+    """Render event times in the host's local timezone for operator readability."""
+
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        """Format a record timestamp using the configured local-time pattern."""
         return datetime.fromtimestamp(record.created).astimezone().strftime(datefmt or "%H:%M:%S")
 
 
 def configure_logging(verbose: bool = False) -> logging.Logger:
+    """Create the single EDR4 console logger for normal or verbose operation."""
     logger = logging.getLogger("edr4")
     logger.handlers.clear()
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
@@ -47,12 +55,15 @@ def should_display_event(event: TelemetryEvent, verbose: bool) -> bool:
     """Keep normal mode focused on findings and events needing attention."""
     if verbose:
         return True
+    # Detections and service transitions are operationally important even if a
+    # future rule emits one at informational severity.
     if event.event_type in {"detection", "service_status"}:
         return True
     return event.severity in {"warning", "error", "critical"}
 
 
 def log_event(logger: logging.Logger, event: TelemetryEvent, verbose: bool) -> None:
+    """Render a visible event, including redacted structured data when verbose."""
     if not should_display_event(event, verbose):
         return
     label = _LABELS.get(event.event_type, event.source.upper())

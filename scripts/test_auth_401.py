@@ -14,6 +14,7 @@ _DUMMY_LOGIN = {
 
 
 def main() -> int:
+    """Generate bounded dummy failures and report expected passive telemetry."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--count", type=int, default=5, help="attempt count, 1-10 (default: 5)")
     parser.add_argument("--delay", type=float, default=0.2, help="delay between attempts in seconds")

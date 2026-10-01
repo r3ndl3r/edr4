@@ -1,4 +1,8 @@
-"""Configurable passive detection engine."""
+"""Configurable orchestration for independent passive detection rules.
+
+The engine converts configuration into rule instances and isolates rule
+failures so a faulty detector cannot interrupt telemetry collection.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +21,10 @@ from detection.rules import (
 
 
 class DetectionEngine:
+    """Dispatch normalized events to each enabled detector."""
+
     def __init__(self, config: dict[str, Any] | None = None, logger: logging.Logger | None = None) -> None:
+        """Build enabled rules and apply the shared finding cooldown."""
         settings = config or {}
         self.enabled = bool(settings.get("enabled", False))
         self.logger = logger or logging.getLogger("edr4")
@@ -62,6 +69,7 @@ class DetectionEngine:
             ))
 
     def process(self, event: TelemetryEvent) -> list[Detection]:
+        """Evaluate one event while containing failures to the responsible rule."""
         if not self.enabled or event.event_type == "detection":
             return []
         findings: list[Detection] = []
@@ -69,5 +77,7 @@ class DetectionEngine:
             try:
                 findings.extend(detector.process(event))
             except Exception as exc:
+                # Rules are isolated: one programming or data error must not
+                # stop other rules, collection, or database persistence.
                 self.logger.error("[DETECTION] %s failed: %s", type(detector).__name__, exc)
         return findings

@@ -10,6 +10,7 @@ from common import bounded_count, print_detection_expectation, run_requests, sta
 
 
 def main() -> int:
+    """Generate a bounded burst against a Morgan-logged local endpoint."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--count", type=int, default=35, help="request count, 1-60 (default: 35)")
     parser.add_argument("--delay", type=float, default=0.03, help="delay between requests in seconds")

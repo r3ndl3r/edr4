@@ -1,4 +1,8 @@
-"""Shared safety guard and HTTP helper for local EDR4 tests."""
+"""Shared loopback guard, HTTP client, and operator guidance for live tests.
+
+All traffic helpers enforce the fixed local Juice Shop target. Response bodies
+and synthetic sensitive-looking values are never printed.
+"""
 
 from __future__ import annotations
 
@@ -27,6 +31,7 @@ def assert_local_target() -> None:
 
 
 def bounded_count(requested: int, *, minimum: int, maximum: int) -> int:
+    """Validate a requested test count against its non-disruptive hard bounds."""
     if not minimum <= requested <= maximum:
         raise SystemExit(f"count must be between {minimum} and {maximum}")
     return requested
@@ -56,6 +61,7 @@ def request(path: str, *, method: str = "GET", body: dict[str, str] | None = Non
 
 def run_requests(*, count: int, path: str, delay_seconds: float = 0.0,
                  method: str = "GET", body: dict[str, str] | None = None) -> Counter[int]:
+    """Run a bounded request sequence and return response-status counts."""
     statuses: Counter[int] = Counter()
     for index in range(count):
         statuses[request(path, method=method, body=body)] += 1
@@ -65,6 +71,7 @@ def run_requests(*, count: int, path: str, delay_seconds: float = 0.0,
 
 
 def status_summary(statuses: Counter[int]) -> str:
+    """Render sorted HTTP status counts without response content."""
     return ", ".join(f"{status}={count}" for status, count in sorted(statuses.items()))
 
 

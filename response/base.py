@@ -1,4 +1,8 @@
-"""Response action interface definitions."""
+"""Future response-action contract.
+
+No active response implementation is provided; this interface reserves a
+stable boundary for a later explicitly authorized implementation round.
+"""
 
 from __future__ import annotations
 
@@ -8,4 +12,8 @@ from detection.base import Detection
 
 
 class ResponseAction(Protocol):
-    def process(self, detection: Detection) -> None: ...
+    """Structural interface for a future response action."""
+
+    def process(self, detection: Detection) -> None:
+        """Receive a detection without defining any active behavior yet."""
+        ...

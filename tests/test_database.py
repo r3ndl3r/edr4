@@ -1,3 +1,5 @@
+"""Unit tests for SQLite persistence, deduplication, retention, and redaction."""
+
 from __future__ import annotations
 
 import json
@@ -11,12 +13,16 @@ from storage.database import EventDatabase
 
 
 class EventDatabaseTests(unittest.TestCase):
+    """Exercise each database test in an isolated temporary directory."""
+
     def setUp(self) -> None:
+        """Create a fresh database so tests cannot affect live EDR data."""
         self.temporary = tempfile.TemporaryDirectory()
         self.path = Path(self.temporary.name) / "nested" / "edr4.db"
         self.database = EventDatabase(self.path)
 
     def tearDown(self) -> None:
+        """Close SQLite before removing the temporary test directory."""
         self.database.close()
         self.temporary.cleanup()
 

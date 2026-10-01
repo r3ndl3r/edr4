@@ -1,4 +1,8 @@
-"""Host resource and network telemetry."""
+"""Host resource, interface-rate, and aggregate TCP-state telemetry.
+
+psutil is preferred for portability. TCP state collection falls back to ``ss``
+when process permissions prevent complete psutil connection access.
+"""
 
 from __future__ import annotations
 
@@ -17,6 +21,8 @@ from core.events import create_event
 
 
 class SystemCollector(BaseCollector):
+    """Publish paired system and network snapshots on a fixed cadence."""
+
     def __init__(
         self,
         event_bus: EventBus,
@@ -25,13 +31,17 @@ class SystemCollector(BaseCollector):
         poll_interval: float,
         interface: str,
     ) -> None:
+        """Configure polling and the preferred interface for rate calculation."""
         super().__init__("system", event_bus, stop_event, logger)
         self.poll_interval = poll_interval
         self.interface = interface
         self._previous_net: tuple[float, object] | None = None
+        # As with process CPU sampling, the first system CPU read establishes a
+        # baseline for the next non-blocking percentage calculation.
         psutil.cpu_percent(interval=None)
 
     def _system_event(self):
+        """Build one CPU, memory, disk, and load-average event."""
         cpu = psutil.cpu_percent(interval=None)
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage("/")
@@ -54,20 +64,26 @@ class SystemCollector(BaseCollector):
         )
 
     def _network_counters(self):
+        """Return counters for the configured interface or aggregate fallback."""
         per_interface = psutil.net_io_counters(pernic=True)
         counters = per_interface.get(self.interface)
         interface = self.interface
         if counters is None:
+            # Interface names differ between hosts. Aggregate counters preserve
+            # telemetry rather than failing when the configured name is absent.
             counters = psutil.net_io_counters(pernic=False)
             interface = "all"
         return interface, counters
 
     def _connection_states(self) -> tuple[dict[str, int], str]:
+        """Return aggregate TCP states and the successful collection source."""
         try:
             connections = psutil.net_connections(kind="tcp")
             states = Counter(connection.status or "UNKNOWN" for connection in connections)
             return dict(states), "psutil"
         except (psutil.AccessDenied, PermissionError):
+            # ss provides aggregate state visibility without Python bindings.
+            # Individual socket records are deliberately not published.
             completed = subprocess.run(
                 ["ss", "-Htan"], capture_output=True, text=True, timeout=5, check=False
             )
@@ -81,6 +97,7 @@ class SystemCollector(BaseCollector):
             return dict(states), "ss"
 
     def _network_event(self):
+        """Build counters, rates, and aggregate TCP-state telemetry."""
         now = time.monotonic()
         interface, counters = self._network_counters()
         elapsed = 0.0
@@ -89,6 +106,8 @@ class SystemCollector(BaseCollector):
         if self._previous_net is not None:
             previous_time, previous = self._previous_net
             elapsed = max(now - previous_time, 0.001)
+            # Kernel counters are cumulative. Subtracting the prior sample and
+            # dividing by elapsed monotonic time converts them into rates.
             rates = {
                 "rx_bytes_per_second": max(0.0, (counters.bytes_recv - previous.bytes_recv) / elapsed),
                 "tx_bytes_per_second": max(0.0, (counters.bytes_sent - previous.bytes_sent) / elapsed),
@@ -127,6 +146,7 @@ class SystemCollector(BaseCollector):
         )
 
     def run(self) -> None:
+        """Publish resource and network events until cooperative shutdown."""
         while not self.stop_event.is_set():
             try:
                 self.publish(self._system_event())

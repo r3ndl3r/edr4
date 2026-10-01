@@ -15,6 +15,7 @@ DEFAULT_DATABASE = PROJECT_DIR / "data" / "edr4.db"
 
 
 def main() -> int:
+    """Summarize recent findings and fail when expected detector names are absent."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--since-minutes", type=int, default=10, help="lookback window, 1-1440")
     parser.add_argument("--expect", action="append", default=[], help="required detector name; repeat as needed")

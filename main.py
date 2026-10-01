@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""EDR4 telemetry prototype entry point."""
+"""EDR4 process entry point and central telemetry pipeline orchestration.
+
+Responsibilities:
+- Load and validate local configuration.
+- Start isolated collector threads and consume their normalized events.
+- Render, persist, detect, and route findings through inactive response hooks.
+- Coordinate SIGINT/SIGTERM shutdown without abandoning queued events.
+"""
 
 from __future__ import annotations
 
@@ -36,6 +43,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 
 
 def _arguments() -> argparse.Namespace:
+    """Parse command-line configuration and console verbosity options."""
     parser = argparse.ArgumentParser(description="EDR4 telemetry prototype")
     parser.add_argument("--config", type=Path, default=PROJECT_DIR / "config.toml")
     parser.add_argument("--verbose", action="store_true", help="show structured event details")
@@ -43,12 +51,14 @@ def _arguments() -> argparse.Namespace:
 
 
 def _enabled(config: dict[str, Any], collector: str) -> bool:
+    """Return whether a named collector is explicitly enabled."""
     return bool(config.get("collectors", {}).get(collector, {}).get("enabled", False))
 
 
 def _build_collectors(
     config: dict[str, Any], bus: EventBus, stop_event: threading.Event, logger: logging.Logger
 ) -> list[BaseCollector]:
+    """Construct enabled collectors from centralized configuration values."""
     general = config["general"]
     collector_config = config["collectors"]
     interval = float(general.get("poll_interval_seconds", 5))
@@ -82,6 +92,7 @@ def _startup_summary(
     config: dict[str, Any],
     database_path: Path,
 ) -> None:
+    """Display enabled components and safety state before collection starts."""
     logger.info("EDR4 Telemetry Prototype")
     logger.info("Database: %s", database_path)
     logger.info("Collectors:")
@@ -98,6 +109,7 @@ def _startup_summary(
 
 
 def run() -> int:
+    """Run the collection pipeline and return a process exit status."""
     args = _arguments()
     try:
         config = load_config(args.config)
@@ -107,12 +119,17 @@ def run() -> int:
 
     verbose = bool(args.verbose or config.get("console", {}).get("verbose", False))
     logger = configure_logging(verbose)
+
+    # All collectors observe the same shutdown flag and publish into one
+    # thread-safe queue. They never call storage or detection code directly.
     stop_event = threading.Event()
     bus = EventBus()
 
     storage_config = config.get("storage", {})
     database_path = Path(str(storage_config.get("path", "data/edr4.db")))
     if not database_path.is_absolute():
+        # Relative config paths are anchored to the project rather than the
+        # caller's current directory, so startup behaves consistently.
         database_path = PROJECT_DIR / database_path
     database: EventDatabase | None = None
     if storage_config.get("enabled", True):
@@ -125,6 +142,8 @@ def run() -> int:
     policy = PersistencePolicy(float(storage_config.get("metric_persist_interval_seconds", 15)))
     retention_days = int(storage_config.get("retention_days", 3))
     cleanup_interval = float(storage_config.get("cleanup_interval_seconds", 3600))
+    # Monotonic time measures elapsed intervals safely even if system time is
+    # corrected while EDR4 is running.
     next_cleanup = time.monotonic() + cleanup_interval
     if database is not None:
         try:
@@ -138,6 +157,7 @@ def run() -> int:
     collectors = _build_collectors(config, bus, stop_event, logger)
 
     def request_shutdown(signum: int, _frame: object) -> None:
+        """Translate a process signal into cooperative collector shutdown."""
         if not stop_event.is_set():
             logger.info("EDR4 shutting down... signal=%s", signum)
             stop_event.set()
@@ -151,6 +171,8 @@ def run() -> int:
         collector.start()
 
     try:
+        # Continue after a shutdown request until collector threads have exited
+        # and every event already placed on the queue has been handled.
         while not stop_event.is_set() or any(collector.is_alive() for collector in collectors) or not bus.empty():
             try:
                 event = bus.get(timeout=0.5)
@@ -164,6 +186,8 @@ def run() -> int:
                     except sqlite3.Error as exc:
                         logger.error("[STORAGE] insert failed: %s", exc)
                 for finding in detection.process(event):
+                    # Findings use the same event schema as telemetry, allowing
+                    # one console/storage path for both kinds of records.
                     detection_event = detection_to_event(finding)
                     log_event(logger, detection_event, verbose)
                     if database is not None:
@@ -173,8 +197,12 @@ def run() -> int:
                             logger.error("[STORAGE] detection insert failed: %s", exc)
                     response.process(finding)
             finally:
+                # Queue bookkeeping belongs in finally so an event cannot stay
+                # marked unfinished after a storage or detector exception.
                 bus.task_done()
 
+            # Retention cleanup is intentionally periodic, not per insert; a
+            # DELETE for every event would create unnecessary database load.
             if database is not None and time.monotonic() >= next_cleanup:
                 try:
                     deleted = database.cleanup(retention_days)
@@ -189,6 +217,8 @@ def run() -> int:
         for collector in collectors:
             collector.stop()
         for collector in collectors:
+            # A timeout prevents one faulty collector from hanging shutdown
+            # forever; each collector also receives the shared stop signal.
             collector.join(timeout=5)
         logger.info("Collectors stopped.")
         if database is not None:

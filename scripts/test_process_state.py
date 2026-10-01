@@ -16,6 +16,7 @@ from detection.rules import ProcessStateDetector  # noqa: E402
 
 
 def current_main_pid() -> int:
+    """Read the live service MainPID without signaling or modifying the process."""
     completed = subprocess.run(
         ["systemctl", "show", "juice-shop.service", "-p", "MainPID", "--value"],
         capture_output=True,
@@ -30,6 +31,7 @@ def current_main_pid() -> int:
 
 
 def process_event(timestamp: datetime, pid: int, status: str):
+    """Build one synthetic process event for isolated detector validation."""
     return create_event(
         timestamp=timestamp.isoformat(),
         event_type="process_snapshot",
@@ -40,6 +42,7 @@ def process_event(timestamp: datetime, pid: int, status: str):
 
 
 def main() -> int:
+    """Exercise process-state transitions entirely in memory."""
     live_pid = current_main_pid()
     if live_pid <= 0:
         raise SystemExit("juice-shop.service has no active MainPID")

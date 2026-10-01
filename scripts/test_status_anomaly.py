@@ -9,6 +9,7 @@ from common import bounded_count, print_detection_expectation, run_requests, sta
 
 
 def main() -> int:
+    """Generate bounded local error responses for status-ratio validation."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--count", type=int, default=20, help="request count, 1-30 (default: 20)")
     parser.add_argument("--delay", type=float, default=0.1, help="delay between requests in seconds")

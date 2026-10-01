@@ -1,3 +1,5 @@
+"""Unit tests for concise and verbose console visibility decisions."""
+
 from __future__ import annotations
 
 import unittest
@@ -7,6 +9,8 @@ from core.logging_setup import should_display_event
 
 
 class ConsoleVisibilityTests(unittest.TestCase):
+    """Verify normal mode stays quiet while retaining important messages."""
+
     def test_normal_mode_hides_routine_telemetry(self) -> None:
         for event_type in ("http_request", "journal_event", "process_snapshot",
                            "system_metrics", "network_metrics"):

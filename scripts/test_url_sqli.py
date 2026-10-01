@@ -9,6 +9,7 @@ from common import print_detection_expectation, request
 
 
 def main() -> int:
+    """Send one encoded local marker and verify privacy-preserving telemetry."""
     # The value is encoded before transport and is never printed by this script.
     test_value = "edr4' OR '1'='1'--"
     path = f"/rest/products/search?q={quote(test_value, safe='')}"
