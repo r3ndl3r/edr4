@@ -2,7 +2,7 @@
 
 EDR4 is a lightweight educational telemetry prototype for the Ubuntu VM running OWASP Juice Shop. It implements:
 
-> **Collect → Normalise → Display → Persist**
+> **Collect → Normalise → Display → Persist → Notify**
 
 It observes the existing host and application telemetry. It does not modify Juice Shop, block traffic, quarantine files, terminate processes, alter firewall rules, or perform any other active response.
 
@@ -43,6 +43,7 @@ Journal --------> Event Queue -> Central Consumer -> Console
 Process --------/                              \--> SQLite
 System --------/                               \--> Detection Engine [passive]
                                                        |
+                                                       +--> Email Alerts [optional]
                                                        \--> Response Manager [inactive]
 ```
 
@@ -128,6 +129,38 @@ Settings are in `config.toml`.
 Collectors and individual passive rules can be disabled using their `enabled` keys. Response remains disabled.
 
 Command-line `--verbose` overrides the console setting.
+
+## Optional Gmail email alerts
+
+Passive warning, error, and critical findings can be sent through Gmail SMTP
+using STARTTLS. Email delivery runs in a bounded background queue so a slow or
+unavailable SMTP service does not block telemetry collection. One retry is made
+after an initial failure.
+
+The real credentials are held only in the untracked, owner-readable
+`alerts.cfg`. Copy the committed template with safe permissions:
+
+```bash
+install -m 600 alerts.cfg.example alerts.cfg
+```
+
+The file contains exactly three settings:
+
+```ini
+[gmail]
+username = sender@gmail.com
+app_password = gmail-application-password
+recipients = first@example.com, second@example.com
+```
+
+If the file is absent, email remains disabled. If it is unsafe or invalid, EDR4
+logs a value-free error and continues collecting. Gmail credentials and
+recipient addresses are never copied into SQLite or normal console messages.
+See [INSTALL.md](INSTALL.md) for account and validation instructions.
+
+The SMTP result reports immediate accepted/refused recipient counts without
+printing addresses. Acceptance by Gmail does not prove final inbox delivery;
+another provider may subsequently quarantine, reject, or bounce the message.
 
 ## Passive detection rules
 
@@ -218,6 +251,9 @@ The tests cover:
 - repeated authentication-like 401 thresholds
 - 4xx/5xx status-ratio anomalies
 - process PID, availability, and abnormal-state changes
+- alert-file validation and restrictive permissions
+- Gmail STARTTLS operation ordering with mocked SMTP
+- email evidence allowlisting, severity filtering, retries, and safe failures
 
 Tests do not modify or attack Juice Shop.
 
@@ -245,6 +281,7 @@ Database closed.
 edr4/
 ├── main.py
 ├── config.toml
+├── alerts.cfg.example # safe template; real alerts.cfg is ignored
 ├── requirements.txt
 ├── INSTALL.md
 ├── CONTRIBUTING.md
@@ -253,6 +290,7 @@ edr4/
 ├── core/              # event model, queue, config, logging, redaction
 ├── detection/         # passive rules, cooldowns and detection engine
 ├── docs/              # coding and project documentation
+├── notifications/     # optional queued Gmail SMTP alerts
 ├── response/          # inactive interfaces for later rounds
 ├── scripts/           # controlled localhost-only detector validation
 ├── storage/           # SQLite database and persistence policy
@@ -271,6 +309,7 @@ edr4/
 - Retention state and metric throttling are local to each running EDR process.
 - Detection windows and cooldown state reset when EDR4 restarts.
 - Default thresholds are initial heuristics and require baseline-driven tuning.
+- Gmail alerts depend on outbound SMTP access and an account that supports app passwords.
 - This is a university prototype, not a hardened production EDR.
 
 ## Development boundaries

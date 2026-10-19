@@ -29,6 +29,7 @@ EventBus queue
     +--> each enabled detection rule
               |
               +--> detection event --> console and SQLite
+              +--> optional email notification queue
               +--> inactive response manager
 ```
 
@@ -98,6 +99,12 @@ The Morgan collector may inspect a bounded query value transiently to derive
 SQLi indicator categories. The value is discarded before the event is created.
 Do not move raw query content into the event dictionary for debugging.
 
+The email notifier follows the same minimization rule. It formats only an
+explicit allowlist of detection evidence fields; adding a new field to a
+detection does not automatically place that field in an outgoing message. The
+Gmail app password remains only in the untracked local configuration object and
+must never be copied into an event, log call, exception message, or test fixture.
+
 ## Key modules
 
 | Module | Responsibility |
@@ -110,6 +117,7 @@ Do not move raw query content into the event dictionary for debugging.
 | `core/events.py` | Common event model and first redaction boundary |
 | `core/event_bus.py` | Thread-safe collector-to-consumer queue |
 | `detection/rules.py` | Passive stateful detection rules |
+| `notifications/` | Strict local alert config and queued Gmail SMTP delivery |
 | `storage/database.py` | SQLite schema, inserts, throttling and retention |
 
 ## Safe change workflow

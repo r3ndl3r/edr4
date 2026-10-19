@@ -42,6 +42,19 @@ Verify persisted live findings:
 
 `test_process_state.py` validates the rule in-process and does not inject synthetic findings into the running EDR or its database.
 
+Email delivery has a separate, explicit validation command. It sends one
+external message and therefore requires both a valid local `alerts.cfg` and the
+`--send` confirmation flag:
+
+```bash
+.venv/bin/python scripts/test_email_notification.py --send
+```
+
+The command prints only immediate SMTP accepted/refused counts. It does not
+display addresses, credentials, SMTP responses, or message content. An
+accepted recipient can still be filtered, quarantined, or rejected later by
+the destination mail system.
+
 ## Scripts
 
 | Script | Purpose | Default bound |
@@ -51,6 +64,7 @@ Verify persisted live findings:
 | `test_status_anomaly.py` | Trigger elevated 5xx ratio on a missing API route | 20 requests, maximum 30 |
 | `test_url_sqli.py` | Trigger privacy-preserving URL SQLi metadata and detection | One local GET request |
 | `test_process_state.py` | Validate PID/state/unavailable handling synthetically | No HTTP or process changes |
+| `test_email_notification.py` | Send one explicit Gmail SMTP configuration test | Exactly one email with `--send` |
 | `verify_detections.py` | Summarize recent SQLite detection events | Maximum 24-hour lookback |
 
 ## Safety and privacy
@@ -64,3 +78,5 @@ Verify persisted live findings:
 - The URL SQLi script sends one encoded, non-destructive test string to the local search endpoint. It does not print the input or response body and does not modify application data.
 - These scripts do not test XSS, RCE, file upload, or destructive denial-of-service behavior.
 - Findings are passive; the response manager remains disabled.
+- The email test is the only script that communicates with an external service;
+  it never runs without the explicit `--send` flag.
