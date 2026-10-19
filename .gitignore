@@ -8,3 +8,6 @@ htmlcov/
 data/*.db
 data/*.db-shm
 data/*.db-wal
+
+# Local Gmail alert credentials. Commit alerts.cfg.example, never this file.
+/alerts.cfg

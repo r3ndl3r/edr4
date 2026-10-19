@@ -1,0 +1,7 @@
+# Copy this file to alerts.cfg, set permissions to 0600, and enter local values.
+# Never commit alerts.cfg or place a normal Google account password in it.
+
+[gmail]
+username =
+app_password =
+recipients =
