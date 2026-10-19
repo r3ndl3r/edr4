@@ -36,6 +36,9 @@ from core.event_bus import EventBus
 from core.logging_setup import configure_logging, log_event
 from detection.base import detection_to_event
 from detection.engine import DetectionEngine
+from notifications.config import AlertConfigError, load_email_alert_config
+from notifications.email import GmailEmailNotifier
+from notifications.manager import NotificationManager
 from response.manager import ResponseManager
 from storage.database import EventDatabase, PersistencePolicy
 
@@ -46,6 +49,12 @@ def _arguments() -> argparse.Namespace:
     """Parse command-line configuration and console verbosity options."""
     parser = argparse.ArgumentParser(description="EDR4 telemetry prototype")
     parser.add_argument("--config", type=Path, default=PROJECT_DIR / "config.toml")
+    parser.add_argument(
+        "--alerts-config",
+        type=Path,
+        default=PROJECT_DIR / "alerts.cfg",
+        help="local Gmail alert configuration (default: alerts.cfg)",
+    )
     parser.add_argument("--verbose", action="store_true", help="show structured event details")
     return parser.parse_args()
 
@@ -91,6 +100,7 @@ def _startup_summary(
     logger: logging.Logger,
     config: dict[str, Any],
     database_path: Path,
+    notifications: NotificationManager,
 ) -> None:
     """Display enabled components and safety state before collection starts."""
     logger.info("EDR4 Telemetry Prototype")
@@ -103,6 +113,11 @@ def _startup_summary(
     logger.info(
         "Detection: %s",
         "enabled (passive)" if config.get("detection", {}).get("enabled") else "disabled",
+    )
+    logger.info(
+        "Email alerts: %s",
+        f"enabled ({notifications.recipient_count} recipient(s))"
+        if notifications.enabled else "disabled",
     )
     logger.info("Response: %s", "enabled" if config.get("response", {}).get("enabled") else "disabled")
     logger.info("Press Ctrl+C to stop.")
@@ -119,6 +134,19 @@ def run() -> int:
 
     verbose = bool(args.verbose or config.get("console", {}).get("verbose", False))
     logger = configure_logging(verbose)
+
+    alerts_path = args.alerts_config
+    if not alerts_path.is_absolute():
+        alerts_path = PROJECT_DIR / alerts_path
+    try:
+        alert_config = load_email_alert_config(alerts_path)
+    except AlertConfigError as exc:
+        # Config errors never include supplied values. Collection continues so
+        # an unavailable notification channel cannot disable host telemetry.
+        logger.error("[EMAIL] alerts disabled: %s", exc)
+        alert_config = None
+    email_notifier = GmailEmailNotifier(alert_config) if alert_config is not None else None
+    notifications = NotificationManager(email_notifier, logger)
 
     # All collectors observe the same shutdown flag and publish into one
     # thread-safe queue. They never call storage or detection code directly.
@@ -166,7 +194,8 @@ def run() -> int:
 
     signal.signal(signal.SIGINT, request_shutdown)
     signal.signal(signal.SIGTERM, request_shutdown)
-    _startup_summary(logger, config, database_path)
+    _startup_summary(logger, config, database_path, notifications)
+    notifications.start()
     for collector in collectors:
         collector.start()
 
@@ -196,6 +225,7 @@ def run() -> int:
                         except sqlite3.Error as exc:
                             logger.error("[STORAGE] detection insert failed: %s", exc)
                     response.process(finding)
+                    notifications.submit(finding)
             finally:
                 # Queue bookkeeping belongs in finally so an event cannot stay
                 # marked unfinished after a storage or detector exception.
@@ -220,6 +250,9 @@ def run() -> int:
             # A timeout prevents one faulty collector from hanging shutdown
             # forever; each collector also receives the shared stop signal.
             collector.join(timeout=5)
+        notifications.stop()
+        if notifications.enabled:
+            logger.info("Email notification worker stopped.")
         logger.info("Collectors stopped.")
         if database is not None:
             database.close()
